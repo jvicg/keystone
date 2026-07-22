@@ -1,0 +1,36 @@
+{
+  // files associations
+  "files.associations": {
+    "*.yml": "ansible",
+    "*.yml.example": "yaml"
+  },
+
+  // pylance
+  "python.analysis.typeCheckingMode": "basic",
+  "python.analysis.inlayHints.functionReturnTypes": true,
+  "python.analysis.typeEvaluation.strictDictionaryInference": true,
+  "python.analysis.typeEvaluation.strictListInference": true,
+  "python.analysis.typeEvaluation.strictSetInference": true,
+  "python.terminal.activateEnvInCurrentTerminal": true,
+  "python.analysis.typeEvaluation.deprecateTypingAliases": false,
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestEnabled": true,
+  "python-envs.defaultEnvManager": "ms-python.python:system",
+
+  // formatter
+  "ruff.importStrategy": "useBundled",
+  "editor.defaultFormatter": "charliermarsh.ruff",
+  "editor.formatOnSave": true,
+  "editor.formatOnPaste": true,
+  "editor.codeActionsOnSave": {
+      "source.organizeImports": "always",
+      "source.unusedImports": "never",
+      "source.fixAll": "always",
+  },
+
+  // tests
+  "python.testing.pytestArgs": [
+      "tests",
+      "-v"
+  ],
+}
