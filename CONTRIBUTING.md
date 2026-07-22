@@ -23,7 +23,7 @@ Please note that this project is released with a [Code of Conduct](CODE_OF_CONDU
 
 ### Reporting Bugs
 
-If you discover a bug in the project, please check the [existing issues](https://github.com/jvicg/arch-install/issues) to see if it has already been reported. If not, you can create a new issue with the following details:
+If you discover a bug in the project, please check the [existing issues](https://github.com/jvicg/keystone/issues) to see if it has already been reported. If not, you can create a new issue with the following details:
 
 - **Title**: A concise summary of the bug.
 - **Description**: Detailed information about the issue, including steps to reproduce, expected behavior, and any relevant logs or screenshots.
