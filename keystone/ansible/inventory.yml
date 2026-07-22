@@ -1,0 +1,16 @@
+---
+targets:
+  hosts:
+    arch_iso:
+      ansible_host: localhost
+      ansible_connection: local
+    arch_chroot:
+      ansible_host: /mnt
+      ansible_chroot_exe: arch-chroot
+      ansible_chroot_disable_root_check: true
+      ansible_connection: community.general.chroot
+  vars:
+    # disk: /dev/vda  # (dynamic var)
+    system_root: /mnt
+    chroot_command: 'arch-chroot {{ system_root }}'
+    ansible_python_interpreter: /usr/bin/python
