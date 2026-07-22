@@ -1,6 +1,8 @@
 .*
-facts/
+!.vscode
+CLAUDE.md
+config.yml
 !.gitignore
-!.ansible-lint
-test_environment/
 *__pycache__*
+!.ansible-lint
+!.python-version
