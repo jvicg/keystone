@@ -1,3 +1,39 @@
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "keystone"
+version = "0.1.0"
+description = "Automatic installation of Arch Linux using Ansible as backend tool."
+authors = ["Javier Correa Guerrero <jcorreag@pm.me>"]
+license = "MIT"
+readme = "README.md"
+homepage = "https://github.com/jvicg/keystone"
+repository = "https://github.com/jvicg/keystone"
+packages = [
+  { include = "keystone" }
+]
+
+[tool.poetry.scripts]
+keystone = "keystone.cli:app"
+
+[tool.poetry.dependencies]
+python = ">=3.11,<3.15"
+pydantic = "^2.12"
+typer = "^0.20"
+rich = "^14.2"
+ansible = "^11.0"
+ansible-runner = "^2.4"
+PyYAML = "^6.0"
+
+[tool.poetry.group.dev.dependencies]
+ruff = "0.14.7"
+pre-commit = "^4.3"
+pytest = "^8.4"
+pytest-cov = "^7.1"
+ansible-lint = "^26.6.0"
+
 [tool.ruff]
 target-version = "py312"
 line-length = 120
@@ -27,4 +63,4 @@ select = [
 convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
-"tests/fixtures/__init__.py" = ["F401"] # Ignore unused import warning for `__init__` file
+"*__init__.py*" = ["F401"] # Ignore unused import warning for `__init__` file
