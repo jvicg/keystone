@@ -4,5 +4,7 @@ CLAUDE.md
 config.yml
 !.gitignore
 *__pycache__*
+!.editorconfig
 !.ansible-lint
 !.python-version
+!.pre-commit-config.yaml
