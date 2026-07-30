@@ -1,0 +1,75 @@
+# keystone - config.yml
+#
+# Required:
+#   - disks.disk
+#   - disks.partitions.boot
+#   - disks.partitions.root
+#   - system.user
+#   - system.password
+#   - system.time_region
+#
+# Everything else is optional and falls back to the default shown.
+
+disks:
+  disk: /dev/nvme0n1  # Required - must be a valid disk
+
+  layout: standard  # Optional - Choose one of: standard | lvm - Default: standard
+
+  # Partition sizes format: integer + unit, e.g. "40 GiB", "512 MiB". MiB or GiB only.
+  # One partition may use "100%FREE" instead of a size to claim all remaining space.
+  partitions:
+    boot: 512 MiB  # Required - min 512 MiB
+    swap: 8 GiB  # Optional - Default: null (no swap) - Min. 512 MiB
+    root: 40 GiB  # Required - min 25 GiB
+    var: null  # Optional - Default: null (no separate /var) - Min 2 GiB
+    home: 100%FREE  # Optional - Default: null (no separate /home) - Min 1 GiB
+
+  encryption:  # Optional - omit if don't want encryption
+    enabled: false  # Optional - Default: false
+    passphrase_env_var: KEYSTONE_LUKS_PASSPHRASE  # Optional - Default: KEYSTONE_LUKS_PASSPHRASE - Read from this env var, never stored here
+
+  lvm_config:  # Optional - Only used if disks.layout = lvm
+    vg_name: vg0  # Optional - Default: vg0
+    lv_root_name: lv_root  # Optional - Default: lv_root
+    lv_home_name: lv_home  # Optional - Default: lv_home
+    lv_var_name: lv_var  # Optional - Default: lv_var
+
+network:
+  hostname: keystone  # Optional - RFC 1123 hostname
+  domain: null  # Optional - Default: null
+  default_if_names: false  # Optional - Default: false - true = classic names (eth0), false = predictable (enp3s0)
+
+  wifi:
+    enabled: false  # Optional - Default: false
+    ssid: null  # Required if enabled = true is set
+    psk_env_var: KEYSTONE_WIFI_PSK  # Optional - Default: KEYSTONE_WIFI_PSK. Read from this env var, never stored here
+
+system:
+  user: example-user  # Required - Lowercase start, alphanumeric/underscore/hyphen, max 32 chars
+  password: "$6$examplesalt$REPLACE_WITH_REAL_HASH..."  # Required - SHA-512 hash, e.g. `mkpasswd -m sha-512`
+  time_region: Europe/Madrid  # Required - Must exist in /usr/share/zoneinfo
+  locale: en_US.UTF-8  # Optional - Default: en_US.UTF-8
+  keymap: us  # Optional - Default: us
+
+security:
+  ssh:
+    enabled: false  # Optional - Default: false
+    ssh_key: null  # Required if security.ssh.enabled = true - Public key only, e.g. "ssh-ed25519 AAAA... user@host"
+    ssh_port: 22  # Optional - Default: 22 - Range: 1-65535
+  firewall: true  # Optional - Default: true
+  disable_root_login: true  # Optional - Default: true
+
+packages:
+  drivers:  # Optional overrides - Leave null to auto-detect
+    video: null  # Optional - Default: null. E.g. ["nvidia", "nvidia-utils"]
+    audio: null  # Optional - Default: null. E.g. ["pipewire", "pipewire-pulse"]
+  video_server: wayland  # Optional - Default: none - Choose one of: wayland | xorg | none
+  desktop_env: gnome  # Optional - Default: none - Choose one of: gnome | kde | hyprland | none
+  extra:  # Optional - Default: empty - Omit if don't want to install any extra packages
+    - neovim
+    - git
+    - htop
+
+extras:
+  dotfiles_repo: null  # Optional - Default: null - https:// URL only
+  post_install_script: null  # Optional - Default: null - URL or path, runs at the end of install
