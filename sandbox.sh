@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Script to run a headless virtual machine to do the tests
+# Script to run a headless virtual machine for testing purposes
 
 # Paths
 TEST_ENV_DIR="${PWD}/.test_environment"
@@ -16,18 +16,18 @@ VDA_SIZE="40G"
 FIRMWARE_FILE="${BIOS_FIRMWARE_FILE}"  # BIOS is set as the default boot mode
 
 usage() {
-  printf "usage: %s [-r] [-b boot_type] [-e|-m] [-h]\n" "$0"
-  printf "\t-r\t\t Delete the virtual disk and recreate it.\n"
-  printf "\t-b boot_type\t Set boot type ('d' for CD, 'c' for disk) Default is 'd'.\n"
-  printf "\t-e\t\t Set the boot mode to UEFI.\n"
-  printf "\t-m\t\t Set the boot mode to BIOS.\n"
-  printf "\t-h\t\t Display this help message.\n"
+  echo -e "usage: ""$0"" [-r] [-b boot_type] [-e|-m] [-h]"
+  echo -e "\t-r\t\t Delete the virtual disk and recreate it."
+  echo -e "\t-b boot_type\t Set boot type ('d' for CD, 'c' for disk) Default is 'd'."
+  echo -e "\t-e\t\t Set the boot mode to UEFI."
+  echo -e "\t-m\t\t Set the boot mode to BIOS."
+  echo -e "\t-h\t\t Display this help message."
   exit 0
 }
 
 validate_boot_type() {
   if [[ ! "$1" =~ ^(d|c)$ ]]; then
-    printf "error: invalid boot type '%s'. valid options are 'd' (cdrom) or 'c' (disk).\n" "$1"
+    echo "error: invalid boot type '$1'. valid options are 'd' (cdrom) or 'c' (disk)."
     exit 1
   fi
 }
@@ -41,7 +41,6 @@ reset_vm() {
 }
 
 main() {
-    # Process args
     while getopts "rmeb:h" opt; do
         case "${opt}" in
             r)
@@ -73,6 +72,7 @@ main() {
     qemu-system-x86_64 \
         -m "${MEM}" -smp "${CORES}" -enable-kvm -cpu host -boot order="${BOOT_TYPE}" \
         -cdrom "${ISO}" -drive file="${VDA}",if=virtio,format=qcow2 \
+        -virtfs local,path="${PWD}",mount_tag=keystone,security_model=none,readonly=on \
         -netdev user,id=net1,hostfwd=tcp::2222-:22 \
         -device virtio-net-pci,netdev=net1 \
         -netdev bridge,br=virbr0,id=net0 \
@@ -82,7 +82,7 @@ main() {
 
     QEMU_PID=$!
 
-    printf "info: virtual machine is running with process id: '%s'\n" "${QEMU_PID}"
+    echo "info: virtual machine is running with process id: '${QEMU_PID}'"
 }
 
 main "$@"
