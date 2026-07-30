@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 
 """
-Module responsible of parsing the user-input into serialized data that Ansible can understand.
+Parsing of the user input into serialized data that Ansible can understand.
 
-It does expose `Plan` object that will be consumed by Ansible through the `runner`.
+This module exposes `Plan` object that will be consumed by Ansible through `runner` module.
 """
 
 # TODO: Avoid importing `convert_size_to_bytes` from `contract`. Maybe move those functions to `helpers` module
@@ -335,6 +335,7 @@ class Plan:
         plan["mount_plan"] = self._build_mount_plan(partition_plan)
         plan["swap_device"] = self._get_swap_device(partition_plan)
 
+        # LVM-specific variables
         if self._is_lvm:
             plan["lvm_pesize"] = _PESIZE
             plan["lvm_volumes_plan"] = self._build_lvm_lv_plan()
