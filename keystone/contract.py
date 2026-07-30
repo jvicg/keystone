@@ -6,10 +6,13 @@ Pydantic model defining the installation config contract.
 This module exposes different models responsible of validating the user input obtained via TUI or via `config.yml`.
 """
 
-# TODO: Raise custom exception on _parse_size_to_bytes()
+# TODO: Raise custom exception on _convert_size_to_bytes()
 # TODO: Add support for multiple PVs in LVM
 # TODO: Implement support for files in `PackagesConfig.extra` to bulk load packages
 # TODO: Validate wifi.ssid using a pattern instead of a raw str
+# TODO: Ensure that required environmental variables are declared when running semantic validation (encryption and wifi)
+# TODO: Type size arguments in converting functions (i.e `convert_size_to_bytes`)
+#       so the get Size types instead of raw strings
 
 from __future__ import annotations
 
@@ -31,18 +34,18 @@ from keystone.probe import (
 )
 
 # ----------------------
-# Default values
+# Constants
 # ----------------------
 
-# Partition / disk defaults
 _UNIT_MULTIPLIERS_MAP = {"MIB": 1024**2, "GIB": 1024**3}
-_MIN_BOOT_SIZE_BYTES = 512 * _UNIT_MULTIPLIERS_MAP["MIB"]  # 512 MiB
-_MIN_ROOT_SIZE_BYTES = 10 * _UNIT_MULTIPLIERS_MAP["GIB"]  # 10 GiB
-_MIN_SWAP_SIZE_BYTES = 512 * _UNIT_MULTIPLIERS_MAP["MIB"]  # 512 MiB
-_MIN_HOME_SIZE_BYTES = 1 * _UNIT_MULTIPLIERS_MAP["GIB"]  # 1 GiB
-_MIN_VAR_SIZE_BYTES = 2 * _UNIT_MULTIPLIERS_MAP["GIB"]  # 2 GiB
-_REST_OF_DISK_VALUE = "100%FREE"  # Special value to choose all the remaining space in the partition
-_PARTED_REST_OF_DISK = "100%"  # Value used to indicate parted that rest of this shall be used
+"""Map with the number of bytes of different bytes units such as MiB or GiB."""
+
+# Partition minimum sizes
+_MIN_BOOT_SIZE_BYTES = 512 * _UNIT_MULTIPLIERS_MAP["MIB"]  # Min. /boot partition size - 512 MiB
+_MIN_ROOT_SIZE_BYTES = 10 * _UNIT_MULTIPLIERS_MAP["GIB"]  # Min. / partition size - 10 GiB
+_MIN_SWAP_SIZE_BYTES = 512 * _UNIT_MULTIPLIERS_MAP["MIB"]  # Min. swap partition size - 512 MiB
+_MIN_HOME_SIZE_BYTES = 1 * _UNIT_MULTIPLIERS_MAP["GIB"]  # Min. /home partition size - 1 GiB
+_MIN_VAR_SIZE_BYTES = 2 * _UNIT_MULTIPLIERS_MAP["GIB"]  # Min. /var partition size - GiB
 
 _MIN_SIZE_MAP = {
     "root": _MIN_ROOT_SIZE_BYTES,
@@ -51,7 +54,9 @@ _MIN_SIZE_MAP = {
     "home": _MIN_HOME_SIZE_BYTES,
     "var": _MIN_VAR_SIZE_BYTES,
 }
+"""Map used to dinamically calculate the minimum size of the partition that chose `REST_OF_DISK_KEYWORD`."""
 
+# Disk defaults
 _DEFAULT_PARTITION_LAYOUT: Literal["standard", "lvm"] = "standard"
 _DEFAULT_ENCRYPTION_ENABLED = False
 
@@ -60,8 +65,6 @@ _DEFAULT_LVM_VG = "vg0"
 _DEFAULT_LVM_LV_ROOT = "lv_root"
 _DEFAULT_LVM_LV_HOME = "lv_home"
 _DEFAULT_LVM_LV_VAR = "lv_var"
-
-_LVM_MEMBERS = ("root", "home", "var")
 
 # System defaults
 _DEFAULT_LOCALE = "en_US.UTF-8"
@@ -81,6 +84,9 @@ _DEFAULT_DESKTOP_ENV: Literal["gnome", "kde", "hyprland", "none"] = "none"
 _DEFAULT_HOSTNAME = "keystone"
 _DEFAULT_IF_NAMES = False
 _DEFAULT_WIFI_ENABLED = False
+
+REST_OF_DISK_KEYWORD = "100%FREE"
+"""Special value used by the user to choose all the remaining space in a partition."""
 
 # ----------------------
 # Patterns
@@ -127,36 +133,41 @@ cannot begin with a hyphen, and cannot be a reserved name (., .., snapshot, pvmo
 # ----------------------
 
 
-def _parse_size_to_bytes(size: int, unit: str) -> int:
-    """Convert a `size` of `unit` into bytes."""
-    _unit = unit.upper()
-    if _unit not in _UNIT_MULTIPLIERS_MAP:
-        raise ValueError(
-            f"'{unit}' is not a supported unit. Supported formats: {', '.join(_UNIT_MULTIPLIERS_MAP.keys())}"
-        )
+def convert_size_to_bytes(size: str | None) -> int:
+    """
+    Convert an optional string with pattern "XX MiB|GiB" into bytes.
 
-    return size * _UNIT_MULTIPLIERS_MAP[_unit]
+    Args:
+        size (str | None): A string matching the pattern `_SIZE_PATTERN` or None.
 
-
-def _parse_partition_size_to_bytes(size: str | None) -> int:
-    """Convert an optional string with pattern 'size unit' into bytes. (See: _SIZE_PATTERN)."""
+    Returns:
+        int: Returns an integer with the size in bytes or 0 if size is None.
+    """
     if size is None:
         return 0
 
     m = _SIZE_PATTERN.match(size)
 
+    # The size pattern is already validated by `PartitionConfig` model,
+    # just double check for cases when it's used outside Config
     if m is None:
         raise ValueError(f"'{size}' does not match the expected size format")
 
-    return _parse_size_to_bytes(int(m["size"]), m["unit"])
+    size_int = int(m["size"])
+    unit_upper = m["unit"].upper()
+
+    return size_int * _UNIT_MULTIPLIERS_MAP[unit_upper]
 
 
-def _parse_bytes_to_hreadable(size_bytes: int) -> str:
+def _format_bytes(size_bytes: int) -> str:
     """
-    Format a byte count back into a human-readable MiB/GiB string for messages.
+    Format a byte count into a human-readable MiB/GiB string for messages.
+
+    Args:
+        size_bytes (int): Integer with a bytes size.
 
     Returns:
-        str: A string like "512MiB" or "40GiB".
+        str: A string like "512 MiB" or "40 GiB".
     """
     gib = _UNIT_MULTIPLIERS_MAP["GIB"]
     mib = _UNIT_MULTIPLIERS_MAP["MIB"]
@@ -208,9 +219,9 @@ def _size_validator(pattern: re.Pattern[str], min_size_bytes: int, err_msg: str)
     """
 
     def _validate(value: str) -> str:
-        # Avoid validation for the literal string `_REST_OF_DISK_VALUE`
+        # Avoid validation for the literal string `REST_OF_DISK_KEYWORD`
         # The validation will be performed in `DiskConfig.validate_sematic` after the remaining space is calculated
-        if value == _REST_OF_DISK_VALUE:
+        if value == REST_OF_DISK_KEYWORD:
             return value
 
         m = pattern.match(value)
@@ -218,12 +229,10 @@ def _size_validator(pattern: re.Pattern[str], min_size_bytes: int, err_msg: str)
             raise ValueError(err_msg.format(value=value))
 
         # Parsed without extra validation - the pattern already guarantees expected input
-        size_bytes = _parse_partition_size_to_bytes(value)
+        size_bytes = convert_size_to_bytes(value)
 
         if size_bytes < min_size_bytes:
-            raise ValueError(
-                f"'{value}' is below the minimum size of {_parse_bytes_to_hreadable(min_size_bytes)} for this field"
-            )
+            raise ValueError(f"'{value}' is below the minimum size of {_format_bytes(min_size_bytes)} for this field")
 
         return value
 
@@ -373,6 +382,17 @@ class LVMConfig(BaseModel):
     lv_home_name: LVMName = _DEFAULT_LVM_LV_HOME
     lv_var_name: LVMName = _DEFAULT_LVM_LV_VAR
 
+    def get_lv_name(self, partition: str) -> str:
+        """Return the configured LV name for a given partition."""
+        mapping = {
+            "root": self.lv_root_name,
+            "var": self.lv_var_name,
+            "home": self.lv_home_name,
+        }
+        if partition not in mapping:
+            raise KeyError(f"'{partition}' has no configured LV name")
+        return mapping[partition]
+
 
 class PartitionsConfig(BaseModel):
     """
@@ -380,8 +400,8 @@ class PartitionsConfig(BaseModel):
     """
 
     boot: SizeBoot
-    root: SizeRoot
     swap: SizeSwap | None = None
+    root: SizeRoot
     var: SizeVar | None = None
     home: SizeHome | None = None
 
@@ -413,29 +433,28 @@ class DiskConfig(BaseModel):
         if not disk_exists(self.disk):
             raise ValueError(f"Disk '{self.disk}' was not found on this machine")
 
-        is_lvm = self.layout == "lvm"  # Reserve more space for LVM metada if LVM layout
         requested_bytes = 0
-        available_bytes = disk_usable_space(self.disk, is_lvm)
+        available_bytes = disk_usable_space(self.disk)
 
         partition_dict = self.partitions.model_dump(exclude_none=True)
         dynamic_partition = ""
 
         # Iterate over all the partitions to calculate all the bytes
         for partition, size in partition_dict.items():
-            if size == _REST_OF_DISK_VALUE:
-                # Ensure only one partition choose `_REST_OF_DISK_VALUE` value
+            if size == REST_OF_DISK_KEYWORD:
+                # Ensure only one partition choose `REST_OF_DISK_KEYWORD` value
                 if dynamic_partition:
-                    raise ValueError(f"Only one partition can use the value '{_REST_OF_DISK_VALUE}'")
+                    raise ValueError(f"Only one partition can use the value '{REST_OF_DISK_KEYWORD}'")
                 else:
                     dynamic_partition = partition
                     continue
 
-            requested_bytes += _parse_partition_size_to_bytes(size)
+            requested_bytes += convert_size_to_bytes(size)
 
         if requested_bytes > available_bytes:
             raise ValueError(
-                f"Requested partitions total {_parse_bytes_to_hreadable(requested_bytes)} but "
-                f"'{self.disk}' only has {_parse_bytes_to_hreadable(available_bytes)} available"
+                f"Requested partitions total {_format_bytes(requested_bytes)} but "
+                f"'{self.disk}' only has {_format_bytes(available_bytes)} available"
             )
 
         # Ensure that remaining space is enough for the partition which choose it (if any)
@@ -446,8 +465,8 @@ class DiskConfig(BaseModel):
             if remaining_space < min_partition_size:
                 raise ValueError(
                     f"Minimum size for partition '{dynamic_partition}' "
-                    f"is {_parse_bytes_to_hreadable(min_partition_size)} "
-                    f"and there's only {_parse_bytes_to_hreadable(remaining_space)} left in '{self.disk}'"
+                    f"is {_format_bytes(min_partition_size)} "
+                    f"and there's only {_format_bytes(remaining_space)} left in '{self.disk}'"
                 )
 
         return self
