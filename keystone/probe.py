@@ -10,8 +10,9 @@ import json
 import subprocess
 from pathlib import Path
 
-_FIRST_PARTITION_START = 1 * (1024**2)  # 1 MiB - the first partition will begin with 1 MiB offset
-_GPT_RESERVED_END_BYTES = 33 * 512  # 33 sectors overhead to calculate the last usable LBA
+_FIRST_PARTITION_START_RESERVED = 1 * (1024**2)  # 1 MiB - the first partition will begin with 1 MiB offset
+_GPT_END_BYTES_RESERVED = 33 * 512  # 33 sectors overhead to calculate the last usable LBA
+_RESERVED_BYTES = _FIRST_PARTITION_START_RESERVED + _GPT_END_BYTES_RESERVED
 
 _ZONEINFO_ROOT = Path("/usr/share/zoneinfo")
 _LOCALE_GEN = Path("/etc/locale.gen")
@@ -21,7 +22,7 @@ _ARCHISO_ROOT = Path("/run/archiso/airootfs")
 
 def is_archiso() -> bool:
     """
-    Return True when running from the official Arch Linux live ISO.
+    Check whether script is running in the official Arch Linux live ISO or not.
     """
     return _ARCHISO_ROOT.exists()
 
@@ -84,8 +85,7 @@ def disk_usable_space(device: str) -> int:
     for dev in data.get("blockdevices", []):
         if dev.get("path") == device and dev.get("size") is not None:
             size = int(dev["size"])
-            # Subtract GPT and LVM overheads
-            return size - _FIRST_PARTITION_START - _GPT_RESERVED_END_BYTES
+            return size - _RESERVED_BYTES
 
     return 0
 
