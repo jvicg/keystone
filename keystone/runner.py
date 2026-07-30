@@ -32,20 +32,17 @@ def run_install(
     event_handler: Callable[[dict[str, Any]], bool] | None = None,
 ) -> ansible_runner.runner.Runner:
     """
-    Run the bundled site.yml against a validated Config.
+    Run the bundled `site.yml` against a validated config.
 
-    Resolves the playbook and roles shipped inside keystone/ansible/ via
-    importlib.resources (works whether the package is installed from a wheel, from
-    git, or run in place from a source checkout), and hands them to ansible-runner
-    along with the config as extravars.
+    Resolves the playbook and roles shipped inside keystone/ansible/
+    and hands them to ansible-runner along with the config as extravars.
 
     Args:
-        config: A fully validated `contract.Config`
+        plan: The formatted execution plan.
         event_handler: Optional callback invoked for every Ansible event.
 
     Returns:
-        The ansible_runner.Runner object. Check `.status` ("successful", "failed",
-        "timeout", ...) and `.rc` on it to determine whether the install succeeded.
+        ansible_runner.runner.Runner: The `Runner` object.
     """
     extravars = {"keystone": plan.ansible_vars}
 
