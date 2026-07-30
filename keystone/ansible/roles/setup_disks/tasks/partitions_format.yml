@@ -1,16 +1,6 @@
 ---
-- name: Format the root filesystem as {{ standard_fstype }}
+- name: Format the partitions
   community.general.filesystem:
-    dev: '{{ lvm_lv_root_device }}'
-    fstype: '{{ standard_fstype }}'
-
-- name: Format the home filesystem as {{ standard_fstype }}
-  community.general.filesystem:
-    dev: '{{ lvm_lv_home_device }}'
-    fstype: '{{ standard_fstype }}'
-
-- name: Format the boot partition as {{ boot_partition.fstype }}
-  community.general.filesystem:
-    dev: '{{ boot_partition_device }}'
-    fstype: '{{ boot_partition.fstype }}'
-  when: fact_boot_mode == 'efi'
+    dev: '{{ item.src }}'  # `item.src` is the actual device. See `plan` module for more information
+    fstype: '{{ item.fstype }}'
+  loop: '{{ keystone.mount_plan }}'

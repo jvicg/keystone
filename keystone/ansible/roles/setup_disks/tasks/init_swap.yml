@@ -1,5 +1,13 @@
 ---
 - name: Initialize the SWAP partition
   community.general.filesystem:
-    dev: '{{ swap_partition_device }}'
+    dev: '{{ keystone.swap_device }}'
     fstype: swap
+
+- name: Add SWAP to fstab
+  ansible.posix.mount:
+    path: none
+    src: '{{ keystone.swap_device }}'
+    fstype: swap
+    opts: sw
+    state: present

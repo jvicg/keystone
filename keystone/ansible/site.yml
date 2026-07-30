@@ -1,8 +1,14 @@
 ---
-- name: Keystone install
-  hosts: arch_iso
-  gather_facts: true
-  tasks:
-    - name: Print a value pulled from keystone_config extravars
-      ansible.builtin.debug:
-        msg: "hostname from config: {{ keystone_config.network.hostname }}"
+- name: Install the base system
+  hosts:
+    - arch_iso
+  roles:
+    - setup_disks
+    # - base_system
+    # - boot
+
+# - name: Setup the desktop environment
+#   hosts:
+#     - arch_chroot
+#   roles:
+#     - desktop_environment

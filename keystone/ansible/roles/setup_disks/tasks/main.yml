@@ -1,8 +1,11 @@
 ---
-- ansible.builtin.import_tasks: calc_partition_sizes.yml
 - ansible.builtin.import_tasks: partition_layout.yml
+
 - ansible.builtin.import_tasks: init_swap.yml
-- ansible.builtin.import_tasks: calc_lv_sizes.yml
+  when: keystone.swap_device | default(none) is not none
+
 - ansible.builtin.import_tasks: init_lvm.yml
+
 - ansible.builtin.import_tasks: partitions_format.yml
+
 - ansible.builtin.import_tasks: mount.yml

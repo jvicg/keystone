@@ -1,25 +1,9 @@
 ---
-- name: Mount the root partition
+- name: Mount the partitions
   ansible.posix.mount:
-    path: '{{ lvm_partition.lv_root.mount_point }}'
-    src: '{{ lvm_lv_root_device }}'
-    fstype: '{{ standard_fstype }}'
+    path: '{{ item.path }}'
+    src: '{{ item.src }}'
+    fstype: '{{ item.fstype }}'
     state: ephemeral
   changed_when: false
-
-- name: Mount the home partition
-  ansible.posix.mount:
-    path: '{{ lvm_partition.lv_home.mount_point }}'
-    src: '{{ lvm_lv_home_device }}'
-    fstype: '{{ standard_fstype }}'
-    state: ephemeral
-  changed_when: false
-
-- name: Mount the boot partition
-  ansible.posix.mount:
-    path: '{{ boot_partition.mount_point }}'
-    src: '{{ boot_partition_device }}'
-    fstype: '{{ boot_partition.fstype }}'
-    state: ephemeral
-  when: fact_boot_mode == 'efi'
-  changed_when: false
+  loop: '{{ keystone.mount_plan }}'

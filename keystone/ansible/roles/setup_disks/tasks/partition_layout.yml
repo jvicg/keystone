@@ -1,39 +1,12 @@
 ---
-- name: Create boot partition (EFI systems only)
+- name: Create the partitions
   community.general.parted:
     device: '{{ disk }}'
-    number: '{{ boot_partition.number }}'
-    unit: '{{ parted_unit }}'
+    number: '{{ item.number }}'
     state: present
-    label: '{{ partition_scheme }}'
-    flags: [esp]
-    part_end: '{{ fact_boot_partition_end ~ parted_unit }}'
-  when: fact_boot_mode == 'efi'
-
-- name: Create the SWAP partition
-  community.general.parted:
-    device: '{{ disk }}'
-    number: '{{ swap_partition.number }}'
-    unit: '{{ parted_unit }}'
-    state: present
-    label: '{{ partition_scheme }}'
-    fs_type: linux-swap
-    part_start: '{{ "0%" if fact_boot_mode == "bios" else fact_boot_partition_end | string + parted_unit }}'
-    part_end: '{{ fact_swap_partition_end ~ parted_unit }}'
-
-- name: Create the partition for LVM
-  community.general.parted:
-    device: '{{ disk }}'
-    number: '{{ lvm_partition.number }}'
-    unit: '{{ parted_unit }}'
-    flags: [lvm]
-    state: present
-    label: '{{ partition_scheme }}'
-    part_start: '{{ fact_swap_partition_end ~ parted_unit }}'
-    part_end: '{{ lvm_partition.size }}'
-  register: register_partitions_info
-
-# The size of the lvm partition will be used to calculate the partition remanining space after lv_root creation
-- name: Register the LVM partition size
-  ansible.builtin.set_fact:
-    fact_lvm_partition_size: '{{ register_partitions_info.partitions[lvm_partition.number | int - 1].size }}'
+    unit: '{{ keystone.parted_unit }}'
+    label: '{{ item.label }}'
+    flags: '{{ item.flags }}'
+    part_start: '{{ item.part_start ~ keystone.parted_unit }}'
+    part_end: '{{ item.part_end ~ keystone.parted_unit }}'
+  loop: '{{ keystone.partition_plan }}'

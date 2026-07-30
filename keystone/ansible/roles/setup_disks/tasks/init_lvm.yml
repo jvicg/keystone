@@ -1,18 +1,13 @@
 ---
 - name: Create the volume group
   community.general.lvg:
-    vg: '{{ lvm_partition.vg.name }}'
-    pvs: '{{ lvm_partition_device }}'
-    pesize: '{{ lvm_partition.vg.pesize }}'
+    vg: '{{ keystone.disks.lvm_config.vg_name }}'
+    pvs: '{{ keystone.lvm_pv_device }}'
+    pesize: '{{ keystone.lvm_pesize }}'
 
-- name: Create logical volume for root filesystem
+- name: Create logical volumes
   community.general.lvol:
-    vg: '{{ lvm_partition.vg.name }}'
-    lv: '{{ lvm_partition.lv_root.name }}'
-    size: '{{ fact_lv_root_size }}'
-
-- name: Create logical volume for home filesystem
-  community.general.lvol:
-    vg: '{{ lvm_partition.vg.name }}'
-    lv: '{{ lvm_partition.lv_home.name }}'
-    size: '{{ fact_lv_home_size }}'
+    vg: '{{ keystone.disks.lvm_config.vg_name }}'
+    lv: '{{ item.lv }}'
+    size: '{{ item.size }}'
+  loop: '{{ keystone.lvm_volumes_plan }}'
