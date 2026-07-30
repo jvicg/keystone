@@ -5,7 +5,6 @@ Main entry point for the CLI application.
 """
 
 # TODO: Add `--dry-run` mode
-# TODO: Validate that the user is running script in a valid Arch ISO before install()
 # TODO: Check a way to make easier to the user to get their config file inside of the ISO
 
 from collections.abc import Callable
