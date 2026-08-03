@@ -7,9 +7,7 @@ This module exposes `Plan` object that will be consumed by Ansible through `runn
 """
 
 # TODO: Avoid importing `convert_size_to_bytes` from `contract`. Maybe move those functions to `helpers` module
-# TODO: Pass LUKS passphrase envvar name, not raw value, to avoid that Ansible may log the password in plain text
 
-from os import getenv
 from typing import Any, NotRequired, TypedDict
 
 from .contract import REST_OF_DISK_KEYWORD, Config, convert_size_to_bytes
@@ -399,7 +397,7 @@ class Plan:
 
         # Crypt specific variables
         if self._is_encrypt:
-            plan["encryption_luks_passphrase"] = getenv(self._config.disks.encryption.passphrase_env_var)
+            plan["encryption_luks_passphrase_env_var"] = self._config.disks.encryption.passphrase_env_var
             plan["encryption_plan"] = self._build_encryption_plan()
 
         # LVM-specific variables

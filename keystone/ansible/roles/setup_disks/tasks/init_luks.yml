@@ -4,6 +4,6 @@
     device: '{{ item.device }}'
     state: opened
     name: '{{ item.name }}'
-    passphrase: '{{ keystone.encryption_luks_passphrase }}'
+    passphrase: "{{ lookup('env', keystone.encryption_luks_passphrase_env_var) }}"
   loop: '{{ keystone.encryption_plan }}'
-  # no_log: true
+  no_log: true
