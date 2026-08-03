@@ -8,8 +8,8 @@ This module exposes `Plan` object that will be consumed by Ansible through `runn
 
 # TODO: Avoid importing `convert_size_to_bytes` from `contract`. Maybe move those functions to `helpers` module
 # TODO: Use bytes instead of MiB as general unit (?)
-# TODO: Add support for LUKS encryption
 # TODO: Try to don't repeat logics in build-plan-related functions
+# TODO: Pass LUKS passphrase envvar name, not raw value, to avoid that Ansible may log the password in plain text
 
 from os import getenv
 from typing import Any, NotRequired, TypedDict
@@ -149,6 +149,7 @@ _PartitionPlan = list[_PartitionEntry]
 _EncryptionPlan = list[_EncryptedDeviceEntry]
 """List of partitions that will be encrypted."""
 
+
 # ----------------------
 # Main module logic
 # ----------------------
@@ -264,28 +265,6 @@ class Plan:
         """
         return self._get_device(partition_plan, "swap")
 
-    def _build_encryption_plan(self, partition_plan: _PartitionPlan) -> _EncryptionPlan:
-        """
-        Build the list of disk partitions that will be encrypted using LUKS.
-        """
-        encryption_plan = []
-
-        for partition in partition_plan:
-            name = partition["name"]
-
-            # Neither swap or /boot will be encrypted
-            if name in ("boot", "swap"):
-                continue
-
-            encryption_plan.append(
-                {
-                    "device": _partition_device_name(self._disk, partition["number"]),
-                    "name": _CRYPT_DEVICE_PREFIX + name,
-                }
-            )
-
-        return encryption_plan
-
     def _build_partition_plan(self) -> _PartitionPlan:
         """
         Builds a sequential list of dictionaries ready to be consumed by Ansible's `parted` module.
@@ -317,6 +296,28 @@ class Plan:
             current_start_mib += part_size
 
         return partition_plan
+
+    def _build_encryption_plan(self, partition_plan: _PartitionPlan) -> _EncryptionPlan:
+        """
+        Build the list of disk partitions that will be encrypted using LUKS.
+        """
+        encryption_plan = []
+
+        for partition in partition_plan:
+            name = partition["name"]
+
+            # Neither swap or /boot will be encrypted
+            if name in ("boot", "swap"):
+                continue
+
+            encryption_plan.append(
+                {
+                    "device": _partition_device_name(self._disk, partition["number"]),
+                    "name": _CRYPT_DEVICE_PREFIX + name,
+                }
+            )
+
+        return encryption_plan
 
     def _build_mount_plan_standard(self, partition_plan: _PartitionPlan) -> _MountPlan:
         """
