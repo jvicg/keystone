@@ -21,7 +21,7 @@ SOURCE_DIR=""
 KEYSTONE_SOURCE="${KEYSTONE_SOURCE:-https://github.com/jvicg/keystone/archive/refs/heads/main.tar.gz}"
 
 # Collections dependencies
-ANSIBLE_COLLECTIONS=(community.general ansible.posix)
+ANSIBLE_COLLECTIONS=(community.general community.crypto ansible.posix)
 
 # URL used to ensure Internet connection
 TEST_URL="https://github.com"
@@ -30,7 +30,7 @@ TEST_URL="https://github.com"
 # enough space in the ISO fs to store all the project
 MIN_RAM_MB=3800
 TMPFS_MIN_MB=1024
-TMPFS_RAM_DIVISOR=4  # Portion of the total RAM to be used for the FS
+TMPFS_RAM_DIVISOR=8  # 1/8 parts of the total RAM to be used for the FS
 
 # Error codes
 ERR_USER_INTERRUPT=1
