@@ -3,4 +3,4 @@
   community.general.filesystem:
     dev: '{{ item.src }}'  # `item.src` is the actual device. See `plan` module for more information
     fstype: '{{ item.fstype }}'
-  loop: '{{ keystone.mount_plan }}'
+  loop: '{{ keystone.mount_plan }}'  # Re-use the mount plan since it contains all the needed data
