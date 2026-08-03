@@ -13,23 +13,24 @@ from typing import Any, NotRequired, TypedDict
 from .contract import REST_OF_DISK_KEYWORD, Config, convert_size_to_bytes
 from .probe import disk_usable_space, is_boot_efi
 
+# Partition and filesystem related constants
 _FIRST_PARTITION_START_MIB = 1
-
-_LVM_PARTITION_NAME = "lvm_pv"
-_LVM_PARTITIONS = ("root", "var", "home")
-"""List of partitions that will live inside of the LVM's VG (if layout is lvm)."""
-_PESIZE = 4
-"""Size of the LVM physical extend (in MiB)."""
-
-_LUKS_CONTAINER_SIZE_MIB = 16
-
-_CRYPT_DEVICE_PREFIX = "crypt_"
-"""Prefix used to name the LUKS containers."""
-
 _PARTED_UNIT = "MiB"
 _SYSTEM_ROOT = "/mnt"
 _STANDARD_FSTYPE = "ext4"
 _BOOT_FSTYPE = "vfat"
+
+# LVM-related constants
+_PESIZE_MIB = 4
+_LVM_PARTITION_NAME = "lvm_pv"
+_LVM_PARTITIONS = ("root", "var", "home")
+"""List of partitions that will live inside of the LVM's VG (if layout is lvm)."""
+
+# Encryption-related constants
+_LUKS_CONTAINER_SIZE_MIB = 16
+_CRYPT_DEVICE_PREFIX = "crypt_"
+"""Prefix used to name the LUKS containers."""
+
 
 # ----------------------
 # Helper functions
@@ -226,8 +227,9 @@ class Plan:
         Returns a key-value map where key is the partition name and value is the size.
         """
         partition_size_map_lvm = self._partition_size_map.copy()
-        partition_size_map_lvm[_LVM_PARTITION_NAME] = _PESIZE
+        partition_size_map_lvm[_LVM_PARTITION_NAME] = _PESIZE_MIB
 
+        # Ensure that the PV has enough space for LUKS container + VG
         if self._is_encrypt:
             partition_size_map_lvm[_LVM_PARTITION_NAME] += _LUKS_CONTAINER_SIZE_MIB
 
@@ -368,14 +370,14 @@ class Plan:
 
     def _build_lvm_lv_plan(self) -> _LogicalVolumePlan:
         """
-        Calculate the logical volumes size ensuring they're multiple of `_PESIZE` (size is rounded down if necessary).
+        Calculate the logical volumes size ensuring they're multiple of `_PESIZE_MIB` (rounded down if necessary).
         """
         lvm_plan = []
 
         for partition in _LVM_PARTITIONS:
             size = self._partition_size_map.get(partition)
             if size:
-                lvm_plan.append({"lv": self._lvm_config.get_lv_name(partition), "size": _align_down(size, _PESIZE)})
+                lvm_plan.append({"lv": self._lvm_config.get_lv_name(partition), "size": _align_down(size, _PESIZE_MIB)})
 
         return lvm_plan
 
@@ -403,7 +405,7 @@ class Plan:
         # LVM-specific variables
         if self._is_lvm:
             lvm_part = self._partition_plan_map[_LVM_PARTITION_NAME]
-            plan["lvm_pesize"] = _PESIZE
+            plan["lvm_pesize"] = _PESIZE_MIB
             plan["lvm_volumes_plan"] = self._build_lvm_lv_plan()
             plan["lvm_pv_device"] = lvm_part["active_device"]
 
