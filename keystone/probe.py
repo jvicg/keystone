@@ -6,6 +6,7 @@ Live-system probing functions used for semantic config validation.
 
 # TODO: Improve the way of getting the disk available size since `lsblk` doesn't care about used/free space
 # TODO: Improve `disk_exists` so its only True when device is not already partitioned
+# TODO: Add probe functions to ensure user has enough RAM for installation
 
 import json
 import subprocess
