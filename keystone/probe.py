@@ -5,13 +5,16 @@ Live-system probing functions used for semantic config validation.
 """
 
 # TODO: Improve the way of getting the disk available size since `lsblk` doesn't care about used/free space
+# TODO: Improve `disk_exists` so its only True when device is not already partitioned
 
 import json
 import subprocess
 from pathlib import Path
 
-_FIRST_PARTITION_START_RESERVED = 1 * (1024**2)  # 1 MiB - the first partition will begin with 1 MiB offset
-_GPT_END_BYTES_RESERVED = 33 * 512  # 33 sectors overhead to calculate the last usable LBA
+_FIRST_PARTITION_START_RESERVED = 1 * (1024**2)  # 1 MiB - the first start partition offset
+_GPT_END_BYTES_RESERVED = 1 * (1024**2)  # 1 MiB - saved at the end of disk for GPT backup
+_LVM_PE_RESERVED = 4 * (1024**2)  # 4 MiB - 1 Physical Extend reserved for LVM metadata
+_LUKS2_CONTAINER_RESERVED = 16 * (1024**2)  # 16 MiB for LUKS container
 _RESERVED_BYTES = _FIRST_PARTITION_START_RESERVED + _GPT_END_BYTES_RESERVED
 
 _ZONEINFO_ROOT = Path("/usr/share/zoneinfo")
@@ -59,17 +62,24 @@ def disk_exists(device: str) -> bool:
     return device in paths
 
 
-def disk_usable_space(device: str) -> int:
+def disk_usable_space(device: str, is_encrypted: bool, is_lvm: bool) -> int:
     """
-    Return bytes available for partitions on a GPT disk.
+    Space safely available for user partitions, accounting for all reserves:
+    1 MiB start offset, GPT end, LVM PE overhead, LUKS metadata.
+    Used by contract to validate that the user's requested sizes fit.
 
     Args:
         device (str): Device path, e.g. "/dev/nvme0n1".
-        is_lvm (bool): Whether the disk will use LVM layout or not.
+        is_encrypted (bool): Whether the disk will be encrypted or not.
+        is_lvm (bool): Whether the partition layout is `lvm` or not.
 
     Returns:
         int: Device usable space in bytes.
     """
+    luks_reserved = _LUKS2_CONTAINER_RESERVED if is_encrypted else 0
+    lvm_reserved = _LVM_PE_RESERVED if is_lvm else 0
+    reserved_total = luks_reserved + _RESERVED_BYTES + lvm_reserved
+
     try:
         result = subprocess.run(
             ["lsblk", "-J", "-b", "-o", "PATH,SIZE"],
@@ -85,7 +95,7 @@ def disk_usable_space(device: str) -> int:
     for dev in data.get("blockdevices", []):
         if dev.get("path") == device and dev.get("size") is not None:
             size = int(dev["size"])
-            return size - _RESERVED_BYTES
+            return size - reserved_total
 
     return 0
 

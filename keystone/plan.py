@@ -7,7 +7,11 @@ This module exposes `Plan` object that will be consumed by Ansible through `runn
 """
 
 # TODO: Avoid importing `convert_size_to_bytes` from `contract`. Maybe move those functions to `helpers` module
+# TODO: Use bytes instead of MiB as general unit (?)
+# TODO: Add support for LUKS encryption
+# TODO: Try to don't repeat logics in build-plan-related functions
 
+from os import getenv
 from typing import Any, NotRequired, TypedDict
 
 from .contract import REST_OF_DISK_KEYWORD, Config, convert_size_to_bytes
@@ -21,10 +25,19 @@ _LVM_PARTITIONS = ("root", "var", "home")
 _PESIZE = 4
 """Size of the LVM physical extend (in MiB)."""
 
+_LUKS_CONTAINER_SIZE_MIB = 16
+
+_CRYPT_DEVICE_PREFIX = "crypt_"
+"""Prefix used to name the LUKS containers."""
+
 _PARTED_UNIT = "MiB"
 _SYSTEM_ROOT = "/mnt"
 _STANDARD_FSTYPE = "ext4"
 _BOOT_FSTYPE = "vfat"
+
+# ----------------------
+# Helper functions
+# ----------------------
 
 
 def _bytes_to_mib(b: int) -> int:
@@ -41,14 +54,14 @@ def _align_down(x: int, multiple: int) -> int:
     return (x // multiple) * multiple
 
 
-def _mount_path(partition: str) -> str:
+def _mount_path(partition_name: str) -> str:
     """
     Returns the filesystem path of a given partition.
     """
-    if partition == "root":
+    if partition_name == "root":
         return _SYSTEM_ROOT
 
-    return _SYSTEM_ROOT + "/" + partition
+    return _SYSTEM_ROOT + "/" + partition_name
 
 
 def _partition_device_name(device: str, number: int) -> str:
@@ -68,13 +81,21 @@ def _lvm_device_name(vg: str, lv: str) -> str:
     return f"/dev/mapper/{vg_escaped}-{lv_escaped}"
 
 
-_PartitionsSizeMap = dict[str, int]
-"""Map containing partitio name as a key and size as a value."""
+def _encrypted_device_name(partition_name: str) -> str:
+    """
+    Returns the path to the encrypted device relative to a partition.
+    """
+    return "/dev/mapper/" + _CRYPT_DEVICE_PREFIX + partition_name
+
+
+# ----------------------
+# Types
+# ----------------------
 
 
 class _MountEntry(TypedDict):
     """
-    Dict containing the filesystem path mountpoint along with the target device.
+    Dict containing the filesystem path mount point along with the device and filesystem target.
     """
 
     path: str
@@ -104,6 +125,18 @@ class _LogicalVolumeEntry(TypedDict):
     size: int
 
 
+class _EncryptedDeviceEntry(TypedDict):
+    """
+    Dict containing the values for the Ansible's module `community.crypto.luks_device`.
+    """
+
+    device: str
+    name: str
+
+
+_PartitionSizeMap = dict[str, int]
+"""Map containing partition name as key and size as value."""
+
 _LogicalVolumePlan = list[_LogicalVolumeEntry]
 """List of LVM Logical Volumes metadata."""
 
@@ -112,6 +145,13 @@ _MountPlan = list[_MountEntry]
 
 _PartitionPlan = list[_PartitionEntry]
 """List of partitions that will be created."""
+
+_EncryptionPlan = list[_EncryptedDeviceEntry]
+"""List of partitions that will be encrypted."""
+
+# ----------------------
+# Main module logic
+# ----------------------
 
 
 class Plan:
@@ -124,18 +164,24 @@ class Plan:
         self._config = config
         self._disk = self._config.disks.disk
         self._is_lvm = self._config.disks.layout == "lvm"
-        self._lvm_config = self._config.disks.lvm_config
+        self._is_encrypt = self._config.disks.encryption.enabled
         self._is_boot_efi = is_boot_efi()
-        self._available_disk_bytes = disk_usable_space(self._disk)
-        self._partitions_size_map = self._calculate_partition_sizes()
-        self._partitions_size_map_lvm = self._calculate_lvm_partitions_size()
+        self._lvm_config = self._config.disks.lvm_config
+        self._disk_total_usable_bytes = disk_usable_space(
+            self._disk, is_encrypted=self._is_encrypt, is_lvm=self._is_lvm
+        )
+        self._partition_size_map = self._calculate_partition_size()
+        self._partition_size_map_lvm = self._calculate_lvm_partition_size()
         self.ansible_vars = self._build_plan()
 
-    def _calculate_partition_sizes(self) -> _PartitionsSizeMap:
+    def _calculate_partition_size(self) -> _PartitionSizeMap:
         """
         Parses user input sizes (i.e "50 MiB") into exact MiB integers, dinamically resolving "100%FREE".
+
+        Returns:
+            _PartitionSizeMap: A key-value map where key is the partition name and value is the size.
         """
-        partition_sizes = {}
+        partition_size_map = {}
         allocated_bytes = 0
         dynamic_partition = None
 
@@ -153,59 +199,101 @@ class Plan:
                 continue
 
             size_bytes = convert_size_to_bytes(size_str)
+
             allocated_bytes += size_bytes
-            partition_sizes[part_name] = _bytes_to_mib(size_bytes)
+            partition_size_map[part_name] = _bytes_to_mib(size_bytes)
 
         # Allocate remaining space to the 100%FREE partition (if any)
         if dynamic_partition:
-            remaining_bytes = self._available_disk_bytes - allocated_bytes
-            partition_sizes[dynamic_partition] = _bytes_to_mib(remaining_bytes)
+            remaining_bytes = self._disk_total_usable_bytes - allocated_bytes
+            partition_size_map[dynamic_partition] = _bytes_to_mib(remaining_bytes)
 
-        return partition_sizes
+        return partition_size_map
 
-    def _calculate_lvm_partitions_size(self) -> _PartitionsSizeMap:
+    def _calculate_lvm_partition_size(self) -> _PartitionSizeMap:
         """
-        Combines all `_LVM_PARTITION_SIZES` into one single partition that will be used by LVM.
+        Combines all `_LVM_PARTITIONS` into one single partition that will be used to create LVM Physical Volume.
+
+        Returns:
+            _PartitionSizeMap: A key-value map where key is the partition name and value is the size.
         """
-        partition_sizes_lvm = self._partitions_size_map.copy()
-        partition_sizes_lvm[_LVM_PARTITION_NAME] = 0
+        partition_size_map_lvm = self._partition_size_map.copy()
+        partition_size_map_lvm[_LVM_PARTITION_NAME] = _PESIZE
+
+        if self._is_encrypt:
+            partition_size_map_lvm[_LVM_PARTITION_NAME] += _LUKS_CONTAINER_SIZE_MIB
 
         for partition in _LVM_PARTITIONS:
-            if partition in self._partitions_size_map:
-                del partition_sizes_lvm[partition]
-                partition_sizes_lvm[_LVM_PARTITION_NAME] += self._partitions_size_map.get(partition, 0)
+            if partition in self._partition_size_map:
+                del partition_size_map_lvm[partition]
+                partition_size_map_lvm[_LVM_PARTITION_NAME] += self._partition_size_map.get(partition, 0)
 
-        return partition_sizes_lvm
+        return partition_size_map_lvm
+
+    def _get_active_device(self, part_name: str, part_number: int) -> str:
+        """
+        Returns the final block device path for a given partition.
+        Resolves to the LUKS mapper device if encryption is enabled for this partition,
+        otherwise returns the raw partition device path.
+        """
+        raw_device = _partition_device_name(self._disk, part_number)
+
+        if self._is_encrypt and part_name not in ("boot", "swap"):
+            return _encrypted_device_name(part_name)
+
+        return raw_device
 
     def _get_device(self, partition_plan: _PartitionPlan, partition_name: str) -> str | None:
         """
-        Get the disk device associated with `partition_name` from a `_PartitionPlan` object.
+        Get the disk device associated with `partition_name` from a `_PartitionPlan` object or `None` if not found.
         """
         for partition in partition_plan:
             if partition.get("name") == partition_name:
-                return _partition_device_name(self._disk, partition.get("number"))
+                return self._get_active_device(partition_name, partition.get("number"))
         return None
 
     def _get_lvm_pv_device(self, partition_plan: _PartitionPlan) -> str | None:
         """
-        Get the Physical Volume device from a `_PartitionPlan` object.
+        Get the Physical Volume device from a `_PartitionPlan` object or `None` if not found.
         """
         return self._get_device(partition_plan, _LVM_PARTITION_NAME)
 
     def _get_swap_device(self, partition_plan: _PartitionPlan) -> str | None:
         """
-        Get the `swap` device from a `_PartitionPlan` object.
+        Get the `swap` device from a `_PartitionPlan` object or `None` if not found.
         """
         return self._get_device(partition_plan, "swap")
 
-    def _build_partitions_plan(self) -> _PartitionPlan:
+    def _build_encryption_plan(self, partition_plan: _PartitionPlan) -> _EncryptionPlan:
+        """
+        Build the list of disk partitions that will be encrypted using LUKS.
+        """
+        encryption_plan = []
+
+        for partition in partition_plan:
+            name = partition["name"]
+
+            # Neither swap or /boot will be encrypted
+            if name in ("boot", "swap"):
+                continue
+
+            encryption_plan.append(
+                {
+                    "device": _partition_device_name(self._disk, partition["number"]),
+                    "name": _CRYPT_DEVICE_PREFIX + name,
+                }
+            )
+
+        return encryption_plan
+
+    def _build_partition_plan(self) -> _PartitionPlan:
         """
         Builds a sequential list of dictionaries ready to be consumed by Ansible's `parted` module.
         """
-        partitions_plan = []
+        partition_plan = []
         current_start_mib = _FIRST_PARTITION_START_MIB
         current_part_number = 1
-        selected_partitions = self._partitions_size_map_lvm if self._is_lvm else self._partitions_size_map
+        selected_partitions = self._partition_size_map_lvm if self._is_lvm else self._partition_size_map
         label = "gpt" if self._is_boot_efi else "msdos"  # Parted partition scheme
 
         for part_name, part_size in selected_partitions.items():
@@ -221,14 +309,14 @@ class Plan:
             if part_name == "boot":
                 partition["flags"] = ["esp"] if self._is_boot_efi else ["boot"]
 
-            if part_name == _LVM_PARTITION_NAME:
+            elif part_name == _LVM_PARTITION_NAME:
                 partition["flags"] = ["lvm"]
 
-            partitions_plan.append(partition)
+            partition_plan.append(partition)
             current_part_number += 1
             current_start_mib += part_size
 
-        return partitions_plan
+        return partition_plan
 
     def _build_mount_plan_standard(self, partition_plan: _PartitionPlan) -> _MountPlan:
         """
@@ -240,16 +328,16 @@ class Plan:
         mount_plan = []
 
         for partition in partition_plan:
-            name = partition["name"]
+            part_name = partition["name"]
 
-            if name == "swap":
+            if part_name == "swap":
                 continue
 
-            fstype = _BOOT_FSTYPE if name == "boot" else _STANDARD_FSTYPE
+            fstype = _BOOT_FSTYPE if part_name == "boot" else _STANDARD_FSTYPE
             mount_plan.append(
                 {
-                    "path": _mount_path(name),
-                    "src": _partition_device_name(self._disk, partition["number"]),
+                    "path": _mount_path(part_name),
+                    "src": self._get_active_device(part_name, partition["number"]),
                     "fstype": fstype,
                 }
             )
@@ -277,7 +365,7 @@ class Plan:
                 "fstype": _STANDARD_FSTYPE,
             }
             for partition in _LVM_PARTITIONS
-            if partition in self._partitions_size_map
+            if partition in self._partition_size_map
         ]
 
         # Look for boot partition number in `partitions_plan`.
@@ -286,7 +374,7 @@ class Plan:
                 mount_plan.append(
                     {
                         "path": _mount_path("boot"),
-                        "src": _partition_device_name(self._disk, partition["number"]),
+                        "src": self._get_active_device(partition["name"], partition["number"]),
                         "fstype": _BOOT_FSTYPE,
                     }
                 )
@@ -308,13 +396,12 @@ class Plan:
 
     def _build_lvm_lv_plan(self) -> _LogicalVolumePlan:
         """
-        Calculate the logical volumes size ensuring that they're multiple of `_PESIZE`.
-        and reserving space for LVM metadata.
+        Calculate the logical volumes size ensuring they're multiple of `_PESIZE` (size is rounded down if necessary).
         """
         lvm_plan = []
 
         for partition in _LVM_PARTITIONS:
-            size = self._partitions_size_map.get(partition)
+            size = self._partition_size_map.get(partition)
             if size:
                 lvm_plan.append({"lv": self._lvm_config.get_lv_name(partition), "size": _align_down(size, _PESIZE)})
 
@@ -330,10 +417,15 @@ class Plan:
         plan["lvm_enabled"] = self._is_lvm
 
         # Dynamic calculations
-        partition_plan = self._build_partitions_plan()
+        partition_plan = self._build_partition_plan()
         plan["partition_plan"] = partition_plan
         plan["mount_plan"] = self._build_mount_plan(partition_plan)
         plan["swap_device"] = self._get_swap_device(partition_plan)
+
+        # Crypt specific variables
+        if self._is_encrypt:
+            plan["encryption_luks_passphrase"] = getenv(self._config.disks.encryption.passphrase_env_var)
+            plan["encryption_plan"] = self._build_encryption_plan(partition_plan)
 
         # LVM-specific variables
         if self._is_lvm:

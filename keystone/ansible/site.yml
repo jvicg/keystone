@@ -3,6 +3,7 @@
   hosts:
     - arch_iso
   roles:
+    - check
     - setup_disks
     # - base_system
     # - boot

@@ -418,7 +418,7 @@ class DiskConfig(BaseModel):
     encryption: EncryptionConfig = Field(default_factory=EncryptionConfig)
 
     @model_validator(mode="after")
-    def validate_semantic(self, info: ValidationInfo) -> DiskConfig:
+    def validate_selected_sizes(self, info: ValidationInfo) -> DiskConfig:
         """
         Check the disk exists and has room for the requested partitions.
 
@@ -433,8 +433,9 @@ class DiskConfig(BaseModel):
         if not disk_exists(self.disk):
             raise ValueError(f"Disk '{self.disk}' was not found on this machine")
 
+        is_lvm = self.layout == "lvm"
         requested_bytes = 0
-        available_bytes = disk_usable_space(self.disk)
+        available_bytes = disk_usable_space(self.disk, is_encrypted=self.encryption.enabled, is_lvm=is_lvm)
 
         partition_dict = self.partitions.model_dump(exclude_none=True)
         dynamic_partition = ""

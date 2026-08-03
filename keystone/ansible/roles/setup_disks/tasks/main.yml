@@ -1,11 +1,15 @@
 ---
-- ansible.builtin.import_tasks: partition_layout.yml
+- ansible.builtin.import_tasks: create_partitions.yml
 
 - ansible.builtin.import_tasks: init_swap.yml
   when: keystone.swap_device | default(none) is not none
 
-- ansible.builtin.import_tasks: init_lvm.yml
+- ansible.builtin.import_tasks: init_luks.yml
+  when: keystone.disks.encryption.enabled
 
-- ansible.builtin.import_tasks: partitions_format.yml
+- ansible.builtin.import_tasks: init_lvm.yml
+  when: keystone.lvm_enabled
+
+- ansible.builtin.import_tasks: format_partitions.yml
 
 - ansible.builtin.import_tasks: mount.yml

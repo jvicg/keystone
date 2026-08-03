@@ -1,0 +1,9 @@
+---
+- name: Create and open the LUKS container
+  community.crypto.luks_device:
+    device: '{{ item.device }}'
+    state: opened
+    name: '{{ item.name }}'
+    passphrase: '{{ keystone.encryption_luks_passphrase }}'
+  loop: '{{ keystone.encryption_plan }}'
+  # no_log: true
