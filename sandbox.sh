@@ -11,14 +11,16 @@ BIOS_FIRMWARE_FILE="/usr/share/qemu/bios-256k.bin"
 # Machine specs
 CORES=4
 MEM="8G"
-BOOT_TYPE="c" 
-VDA_SIZE="40G"
+BOOT_TYPE="c"
+DEFAULT_VDA_SIZE="40G"
+VDA_SIZE="${DEFAULT_VDA_SIZE}"
 FIRMWARE_FILE="${BIOS_FIRMWARE_FILE}"  # BIOS is set as the default boot mode
 
 usage() {
-  echo -e "usage: ""$0"" [-r] [-b boot_type] [-e|-m] [-h]"
+  echo -e "usage: ""$0"" [-r] [-b boot_type] [-s size] [-e|-m] [-h]"
   echo -e "\t-r\t\t Delete the virtual disk and recreate it."
-  echo -e "\t-b boot_type\t Set boot type ('d' for CD, 'c' for disk) Default is 'd'."
+  echo -e "\t-b BOOT_TYPE\t Set boot type ('d' for CD, 'c' for disk) Default is 'd'."
+  echo -e "\t-s DISK_SIZE\t\t Set the virtual disk size (e.g. 60G). Default is ${DEFAULT_VDA_SIZE}."
   echo -e "\t-e\t\t Set the boot mode to UEFI."
   echo -e "\t-m\t\t Set the boot mode to BIOS."
   echo -e "\t-h\t\t Display this help message."
@@ -32,6 +34,14 @@ validate_boot_type() {
   fi
 }
 
+validate_disk_size() {
+  # Accepts formats like 40, 500M, 60G, 2T (case-insensitive for the unit)
+  if [[ ! "$1" =~ ^[1-9][0-9]*[kKmMgGtT]?$ ]]; then
+    echo "error: invalid disk size '$1'. format should be a number followed by an optional unit (e.g., 40G, 500M)."
+    exit 1
+  fi
+}
+
 reset_vm() {
     if pid=$(pidof qemu-system-x86_64); then
         kill "${pid}" >/dev/null 2>&1
@@ -41,7 +51,7 @@ reset_vm() {
 }
 
 main() {
-    while getopts "rmeb:h" opt; do
+    while getopts "rmeb:s:h" opt; do
         case "${opt}" in
             r)
                 reset_vm
@@ -49,6 +59,10 @@ main() {
             b)
                 BOOT_TYPE="${OPTARG}"
                 validate_boot_type "${BOOT_TYPE}"
+                ;;
+            s)
+                VDA_SIZE="${OPTARG}"
+                validate_disk_size "${VDA_SIZE}"
                 ;;
             e)
                 FIRMWARE_FILE="${UEFI_FIRMWARE_FILE}"
