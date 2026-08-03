@@ -24,8 +24,8 @@ from typing import Annotated, Literal
 import yaml
 from pydantic import AfterValidator, BaseModel, Field, ValidationInfo, model_validator
 
-from keystone.exceptions import ConfigFileNotFound, InvalidYAMLConfigFile, UnreadableConfigFile
-from keystone.probe import (
+from .exceptions import ConfigFileNotFound, InvalidYAMLConfigFile, UnreadableConfigFile
+from .probe import (
     disk_exists,
     disk_usable_space,
     keymap_exists,
