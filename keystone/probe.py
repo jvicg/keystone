@@ -76,8 +76,8 @@ def disk_usable_space(device: str, is_encrypted: bool, is_lvm: bool) -> int:
     Returns:
         int: Device usable space in bytes.
     """
-    luks_reserved = _LUKS2_CONTAINER_RESERVED if is_encrypted else 0
     lvm_reserved = _LVM_PE_RESERVED if is_lvm else 0
+    luks_reserved = _LUKS2_CONTAINER_RESERVED if is_encrypted and is_lvm else 0
     reserved_total = luks_reserved + _RESERVED_BYTES + lvm_reserved
 
     try:
