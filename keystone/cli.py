@@ -203,7 +203,7 @@ def install(
     Install Arch Linux via TUI or configuration file.
     """
     if not is_archiso():
-        raise NotArchISOEnvironment("You must run the script from an Arch ISO environment.")
+        raise NotArchISOEnvironment("You must run the script from an official Arch Linux live ISO.")
 
     config = load_config_file(config_file)
 
