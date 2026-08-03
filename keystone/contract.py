@@ -10,7 +10,6 @@ This module exposes different models responsible of validating the user input ob
 # TODO: Add support for multiple PVs in LVM
 # TODO: Implement support for files in `PackagesConfig.extra` to bulk load packages
 # TODO: Validate wifi.ssid using a pattern instead of a raw str
-# TODO: Ensure that required environmental variables are declared when running semantic validation (encryption and wifi)
 # TODO: Type size arguments in converting functions (i.e `convert_size_to_bytes`)
 #       so the get Size types instead of raw strings
 
@@ -18,6 +17,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
+from os import getenv
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -371,6 +371,21 @@ class EncryptionConfig(BaseModel):
     enabled: bool = _DEFAULT_ENCRYPTION_ENABLED
     passphrase_env_var: str = _DEFAULT_LUKS_PASSPHRASE_ENV_VAR
 
+    @model_validator(mode="after")
+    def check_envvar_exists(self) -> EncryptionConfig:
+        """
+        Ensure that environmental variable is set by user if `enabled` is True.
+
+        Raises:
+            ValueError: If wifi.enabled is True but no `passphrase_env_var` set.
+        """
+        if self.enabled and not getenv(self.passphrase_env_var):
+            raise ValueError(
+                f"You must set the environmental variable '{self.passphrase_env_var}' to enable encryption. "
+                f"E.g: `{self.passphrase_env_var}=SOME_PASSPHRASE keystone install`."
+            )
+        return self
+
 
 class LVMConfig(BaseModel):
     """
@@ -492,6 +507,21 @@ class WifiConfig(BaseModel):
         """
         if self.enabled and not self.ssid:
             raise ValueError("You must set an SSID to enable WiFi")
+        return self
+
+    @model_validator(mode="after")
+    def check_envvar_exists(self) -> WifiConfig:
+        """
+        Ensure that environmental variable is set by user if `enabled` is True.
+
+        Raises:
+            ValueError: If wifi.enabled is True but no `psk_env_var` set.
+        """
+        if self.enabled and not getenv(self.psk_env_var):
+            raise ValueError(
+                f"You must set the environmental variable '{self.psk_env_var}' to enable WiFi. "
+                f"E.g: `{self.psk_env_var}=SOME_PASSWORD keystone install`."
+            )
         return self
 
 
