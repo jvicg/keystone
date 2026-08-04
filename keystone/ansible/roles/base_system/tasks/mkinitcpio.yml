@@ -1,14 +1,9 @@
 ---
-- name: Read current mkinitcpio.conf
-  ansible.builtin.set_fact:
-    fact_mkinitcpio_conf: '{{ lookup("file", file.mkinitcpio) }}'
-
-# The lvm2 hook must be added after the block hook and before the filesystems hook
-- name: Update HOOKS to include lvm2 in the correct position
+- name: Add needed HOOKS in initramfs (only for encrypted and/or LVM layouts)
   ansible.builtin.lineinfile:
     path: '{{ file.mkinitcpio }}'
-    regexp: '^HOOKS=\((?!.*\blvm2\b)(.*)\)$'
-    line: "{{ fact_mkinitcpio_conf | regex_replace('HOOKS=\\((.*?)block (.*?)filesystems(.*?)\\)', 'HOOKS=(\\1block lvm2 \\2filesystems\\3)') }}"
+    regexp: '^HOOKS='
+    line: 'HOOKS=({{ keystone.mkinitcpio_hooks | join(" ") }})'
     backrefs: true
   notify:
-    - Create the initramfs image
+    - Generate the initramfs image

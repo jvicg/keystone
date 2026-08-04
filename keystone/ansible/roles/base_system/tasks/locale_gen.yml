@@ -7,3 +7,14 @@
     state: present
   notify:
     - Generate locale
+
+- name: Set configuration files for locale and vconsole
+  ansible.builtin.copy:
+    dest: '{{ item.dest }}'
+    content: '{{ item.content }}'
+    mode: '0644'
+  loop:
+    - dest: '{{ file.locale_conf }}'
+      content: "LANG={{ locale }}\n"
+    - dest: '{{ file.vconsole_conf }}'
+      content: "KEYMAP={{ keymap }}\n"

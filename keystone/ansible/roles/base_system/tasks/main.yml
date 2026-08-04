@@ -8,3 +8,7 @@
 - ansible.builtin.import_tasks: locale_gen.yml
 - ansible.builtin.import_tasks: mkinitcpio.yml
 - ansible.builtin.import_tasks: edit_sudoers.yml
+
+- name: Decrypt on boot non-root partitions without password prompted (standard + encrypted layouts only)
+  ansible.builtin.include_tasks: decrypt_non_root_partitions.yml
+  when: keystone.disks.encryption.enabled and keystone.disks.layout == "standard"

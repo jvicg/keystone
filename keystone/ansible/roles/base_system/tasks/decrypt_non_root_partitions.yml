@@ -1,0 +1,42 @@
+---
+- name: Create the directory to store LUKS key files
+  ansible.builtin.file:
+    path: '{{ file.luks_keyfile_dir }}'
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Create a keyfile to unlock non-root partitions
+  community.general.filesize:
+    path: '{{ file.luks_keyfile }}'
+    size: '{{ luks_keyfile_size }}'
+    source: /dev/urandom
+    owner: root
+    group: root
+    mode: '0400'
+
+- name: Add the keyfile to the LUKS container/s
+  community.crypto.luks_device:
+    device: '{{ item.device }}'
+    passphrase: "{{ lookup('env', keystone.encryption_luks_passphrase_env_var) }}"
+    new_keyfile: '{{ file.luks_keyfile }}'
+  # Filter out root partition
+  loop: "{{ keystone.encryption_plan | rejectattr('name', 'equalto', 'crypt_root') | list }}"
+
+- name: Get UUID of non-root encrypted partitions
+  ansible.builtin.command: "blkid -s UUID -o value {{ item.device }}"
+  register: fact_non_root_luks_uuids
+  changed_when: false
+  loop: "{{ keystone.encryption_plan | rejectattr('name', 'equalto', 'crypt_root') | list }}"
+
+- name: Configure /etc/crypttab for non-root encrypted partitions
+  community.general.crypttab:
+    name: '{{ item.item.name }}'
+    backing_device: 'UUID={{ item.stdout }}'
+    password: "{{ file.luks_keyfile | regex_replace('^/mnt', '') }}"
+    opts: 'luks'
+    state: present
+  loop: '{{ fact_non_root_luks_uuids.results }}'
+  delegate_to: arch_chroot
+  no_log: true

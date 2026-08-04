@@ -2,6 +2,7 @@
 - name: Allow users on wheel group execute root commands
   ansible.builtin.lineinfile:
     path: '{{ file.sudoers }}'
-    regexp: '^#\s*%wheel'
+    regexp: '^#?\s*%wheel\s+ALL=\(ALL(:ALL)?\)\s+ALL\s*$'
     line: '%wheel ALL=(ALL) ALL'
     state: present
+    validate: 'visudo -cf %s'

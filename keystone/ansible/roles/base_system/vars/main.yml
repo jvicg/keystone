@@ -1,6 +1,8 @@
 ---
-hostname: archlinux  # (dynamic var)
-locale: en_US.UTF-8  # (dynamic var)
+hostname: '{{ keystone.network.hostname }}'
+locale: '{{ keystone.system.locale }}'
+keymap: '{{ keystone.system.keymap }}'
+mkinitcpio_hooks: '{{ keystone.mkinitcpio_hooks }}'
 
 file:
   release: '{{ system_root }}/etc/arch-release'
@@ -9,8 +11,12 @@ file:
   hardware_clock: '{{ system_root }}/etc/adjtime'
   hostname: '{{ system_root }}/etc/hostname'
   locale_gen: '{{ system_root }}/etc/locale.gen'
+  locale_conf: '{{ system_root }}/etc/locale.conf'
+  vconsole_conf: '{{ system_root }}/etc/vconsole.conf'
   mkinitcpio: '{{ system_root }}/etc/mkinitcpio.conf'
   sudoers: '{{ system_root }}/etc/sudoers'
+  luks_keyfile_dir: '{{ system_root }}/etc/cryptsetup-keys.d'
+  luks_keyfile: '{{ system_root }}/etc/cryptsetup-keys.d/non-root.key'
 
 base_system_packages:
   - base
@@ -32,7 +38,5 @@ command:
   locale_gen: '{{ chroot_command }} locale-gen'
   mkinitcpio: '{{ chroot_command }} mkinitcpio -P'
 
-timezone:
-  region: Europe  # (dynamic var)
-  city: Madrid  # (dynamic var)
-timezone_file: '{{ system_root }}/usr/share/zoneinfo/{{ timezone.region }}/{{ timezone.city }}'
+timezone_file: '{{ system_root }}/usr/share/zoneinfo/{{ keystone.system.time_region }}'
+luks_keyfile_size: 512B
