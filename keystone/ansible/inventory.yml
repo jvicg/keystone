@@ -5,7 +5,7 @@ targets:
       ansible_host: localhost
       ansible_connection: local
     arch_chroot:
-      ansible_host: '{{ keystone.system_root }}'
+      ansible_host: /mnt
       ansible_chroot_exe: arch-chroot
       ansible_chroot_disable_root_check: true
       ansible_connection: community.general.chroot
