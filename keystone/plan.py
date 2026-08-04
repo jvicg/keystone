@@ -78,11 +78,18 @@ def _lvm_device_name(vg: str, lv: str) -> str:
     return f"/dev/mapper/{vg_escaped}-{lv_escaped}"
 
 
+def _encrypted_container_name(partition_name: str) -> str:
+    """
+    Returns the container name related to a partition.
+    """
+    return _CRYPT_DEVICE_PREFIX + partition_name
+
+
 def _encrypted_device_name(partition_name: str) -> str:
     """
     Returns the path to the encrypted device relative to a partition.
     """
-    return "/dev/mapper/" + _CRYPT_DEVICE_PREFIX + partition_name
+    return "/dev/mapper/" + _encrypted_container_name(partition_name)
 
 
 # ----------------------
@@ -296,7 +303,7 @@ class Plan:
         encryption_plan: _EncryptionPlan = [
             {
                 "device": p["device"],
-                "name": _CRYPT_DEVICE_PREFIX + p["name"],
+                "name": _encrypted_container_name(p["name"]),
             }
             for p in self._partition_plan_map.values()
             if p["name"] not in ("boot", "swap")
@@ -363,10 +370,12 @@ class Plan:
         Dispatches to layout-specific helpers since the two layouts source their
         device information differently.
         """
-        if self._is_lvm:
-            return self._build_mount_plan_lvm()
+        mount_plan = self._build_mount_plan_lvm() if self._is_lvm else self._build_mount_plan_standard()
 
-        return self._build_mount_plan_standard()
+        # Sort by path length so shorter root path (/mnt) are mounted before nested ones (/mnt/boot, /mnt/home)
+        mount_plan.sort(key=lambda x: len(x["path"]))
+
+        return mount_plan
 
     def _build_lvm_lv_plan(self) -> _LogicalVolumePlan:
         """
@@ -381,6 +390,61 @@ class Plan:
 
         return lvm_plan
 
+    def _build_mkinitcpio_hooks(self) -> list[str]:
+        """
+        Builds the ordered list of mkinitcpio hooks for a busybox-based initramfs.
+        Order is critical: block -> encrypt (optional) -> lvm2 (optional) -> filesystems.
+        """
+        hooks = [
+            "base",
+            "udev",
+            "autodetect",
+            "microcode",
+            "modconf",
+            "kms",
+            "keyboard",
+            "keymap",
+            "consolefont",
+            "block",
+        ]  # Standard Arch busy-box hooks
+
+        if self._is_encrypt:
+            hooks.append("encrypt")
+
+        if self._is_lvm:
+            hooks.append("lvm2")
+
+        hooks.extend(["filesystems", "fsck"])
+
+        return hooks
+
+    def _build_encrypted_root_device(self, encryption_plan: _EncryptionPlan) -> dict[str, str]:
+        """
+        Builds a dictionary that contains the physical root encrypted device block, e.g: /dev/vda2,
+        the logical device where the root filesystem shall be mounted, e.g: /dev/mapper/crypt_root
+        and the container name (e.g: crypt_root).
+        """
+        lvm_container_name = _encrypted_container_name(_LVM_PARTITION_NAME)
+        standard_container_name = _encrypted_container_name("root")
+
+        # Encryption plan will containing something like: {"device": "/dev/vda2", "name": "crypt_root"}
+        root_enc_info = next(
+            (item for item in encryption_plan if item["name"] in (lvm_container_name, standard_container_name)),
+        )
+
+        physical_device = root_enc_info["device"]
+        container_name = root_enc_info["name"]
+
+        # In LVM layouts, `logical_device` will point to the root logical volume (e.g: /dev/mapper/vg0-lv_root)
+        # and in standard layouts it will point to the encrypted logical device (e.g: /dev/mapper/crypt_root)
+        logical_device = (
+            _lvm_device_name(self._lvm_config.vg_name, self._lvm_config.get_lv_name("root"))
+            if self._is_lvm
+            else _encrypted_device_name("root")
+        )
+
+        return {"physical_device": physical_device, "logical_device": logical_device, "container_name": container_name}
+
     def _build_plan(self) -> dict[str, Any]:
         """
         Builds the final dictionary to pass to ansible-runner.
@@ -391,6 +455,7 @@ class Plan:
         plan["lvm_enabled"] = self._is_lvm
 
         # Dynamic calculations
+        plan["mkinitcpio_hooks"] = self._build_mkinitcpio_hooks()
         plan["partition_plan"] = self._partition_plan
         plan["mount_plan"] = self._build_mount_plan()
 
@@ -399,8 +464,10 @@ class Plan:
 
         # Crypt specific variables
         if self._is_encrypt:
+            encryption_plan = self._build_encryption_plan()
             plan["encryption_luks_passphrase_env_var"] = self._config.disks.encryption.passphrase_env_var
-            plan["encryption_plan"] = self._build_encryption_plan()
+            plan["encryption_plan"] = encryption_plan
+            plan["encryption_root_device"] = self._build_encrypted_root_device(encryption_plan)
 
         # LVM-specific variables
         if self._is_lvm:
