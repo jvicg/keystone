@@ -2,4 +2,6 @@
 - name: Install grub for BIOS
   ansible.builtin.command:
     cmd: '{{ grub_bios_install_command }}'
-  changed_when: true
+  register: grub_bios_install_result
+  changed_when: grub_bios_install_result.rc == 0
+  notify: Regenerate GRUB config

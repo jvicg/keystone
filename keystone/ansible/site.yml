@@ -5,8 +5,8 @@
   roles:
     - check
     - setup_disks
-    # - base_system
-    # - boot
+    - base_system
+    - boot
 
 # - name: Setup the desktop environment
 #   hosts:

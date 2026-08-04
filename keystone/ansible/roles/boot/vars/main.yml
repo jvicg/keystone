@@ -1,5 +1,5 @@
 ---
-boot_path: '/boot'
+boot_path: /boot
 grub_cfg_path: '{{ boot_path }}/grub/grub.cfg'
 grub_check_file: '{{ system_root ~ grub_cfg_path }}'
 
@@ -11,6 +11,10 @@ grub_efi_package_dependencies:
 grub_package_dependencies: >-
   {{ ['grub'] if fact_boot_mode == 'bios' else grub_efi_package_dependencies }}
 
+grub_bootloader_id: GRUB  # (dynamic var?)
 grub_mkconfig_command: '{{ chroot_command }} grub-mkconfig -o {{ grub_cfg_path }}'
-grub_efi_install_command: '{{ chroot_command }} grub-install --target=x86_64-efi --efi-directory={{ boot_path }} --bootloader-id=GRUB'
+grub_efi_install_command: '{{ chroot_command }} grub-install --target=x86_64-efi --efi-directory={{ boot_path }} --bootloader-id={{ grub_bootloader_id }}'
 grub_bios_install_command: '{{ chroot_command }} grub-install --target=i386-pc {{ disk }}'
+
+encryption_enabled: '{{ keystone.disks.encryption.enabled }}'
+root_encrypted_device: '{{ keystone.encryption_root_device }}'

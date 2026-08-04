@@ -1,0 +1,14 @@
+---
+- name: Get UUID of root encrypted physical device
+  ansible.builtin.command: "blkid -s UUID -o value {{ root_encrypted_device.physical_device }}"
+  register: fact_root_physical_device_uuid
+  changed_when: false
+
+- name: Configure kernel parameters in /etc/default/grub
+  ansible.builtin.lineinfile:
+    path: '{{ system_root }}/etc/default/grub'
+    regexp: '^GRUB_CMDLINE_LINUX='
+    line: >-
+      GRUB_CMDLINE_LINUX="cryptdevice=UUID={{ fact_root_physical_device_uuid.stdout }}:{{ root_encrypted_device.container_name }}
+      root={{ root_encrypted_device.logical_device }}"
+  notify: Regenerate GRUB config

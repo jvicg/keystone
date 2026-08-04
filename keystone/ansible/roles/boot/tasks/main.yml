@@ -1,9 +1,12 @@
 ---
 - ansible.builtin.import_tasks: check.yml
 - ansible.builtin.import_tasks: install_packages.yml
+
 - ansible.builtin.import_tasks: grub_install_efi.yml
   when: not register_grub_stat.stat.exists and fact_boot_mode == 'efi'
+
 - ansible.builtin.import_tasks: grub_install_bios.yml
   when: not register_grub_stat.stat.exists and fact_boot_mode == 'bios'
-- ansible.builtin.import_tasks: grub_mkconfig.yml
-  when: not register_grub_stat.stat.exists
+
+- ansible.builtin.import_tasks: add_kernel_params.yml
+  when: encryption_enabled
